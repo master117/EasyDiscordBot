@@ -6,14 +6,16 @@ using System.Runtime.Remoting.Messaging;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.Serialization;
 using Discord;
 using Discord.WebSocket;
 
 namespace DiscordBot
 {
-    class Program
+    public class Program
     {
         private DiscordSocketClient _client;
+        private object settableRolesLock = new object();
 
         //Contains strings to be replaced
         private List<string> replaceTheseStrings = new List<string>() { "GODDESS", "GOD"};
@@ -25,6 +27,13 @@ namespace DiscordBot
         private Dictionary<ulong, List<DateTime>> spamList = new Dictionary<ulong, List<DateTime>>();
         private Dictionary<ulong, UserInteraction> usageList = new Dictionary<ulong, UserInteraction>();
         private List<SocketRole> settableRolesList = new List<SocketRole>();
+        public struct RolesGuildStruct
+        {
+            public ulong role;
+            public ulong guild;
+
+        }
+
         private string helpMessage =
             "```Commands are:\n" +
             "AddRole <role>\n" +
@@ -44,18 +53,24 @@ namespace DiscordBot
 
 
         public async Task MainAsync()
-        {
+        {          
             _client = new DiscordSocketClient();
 
             _client.Log += Log;
             _client.MessageReceived += MessageReceived;
+            _client.GuildAvailable += _client_GuildAvailable;
 
             string token = File.ReadAllText("Token.txt"); // Remember to keep this private!
             await _client.LoginAsync(TokenType.Bot, token);
             await _client.StartAsync();
-
+          
             // Block this task until the program is closed.
             await Task.Delay(-1);
+        }
+
+        private async Task _client_GuildAvailable(SocketGuild arg)
+        {
+            DeSerializeRoleList();
         }
 
         private async Task MessageReceived(SocketMessage messageParam)
@@ -116,7 +131,7 @@ namespace DiscordBot
             var roles = guild.Roles;
 
             var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
-            var highestposition = guilduserBot.Roles.OrderByDescending(x => x.Position).First().Position;
+            var highestposition = guilduserBot.Roles.Where(x => x.Guild == guild).OrderByDescending(x => x.Position).First().Position;
 
             var guilduser = (message.Author as SocketGuildUser);
 
@@ -151,6 +166,8 @@ namespace DiscordBot
                 settableRolesList.Add(roleToAdd);
                 settableRolesList = settableRolesList.OrderByDescending(x => x.Position).ToList();
                 await message.Channel.SendMessageAsync("```Role " + roleToAdd.Name + " has been added to settable List.```");
+
+                SerializeRoleList();
             }
             else
             {
@@ -177,16 +194,18 @@ namespace DiscordBot
             var messagecontent = message.Content.Substring(trimmessage.Length);
 
             //Find matching role
-            if (!settableRolesList.Any(x => x.Name.ToLower() == messagecontent.ToLower()))
+            if (!settableRolesList.Where(x => x.Guild == guild).Any(x => x.Name.ToLower() == messagecontent.ToLower()))
             {
                 await message.Channel.SendMessageAsync("```Role " + messagecontent + " does not exist in settable list.```");
                 return;
             }
 
-            var roleToDel = settableRolesList.First(x => x.Name.ToLower() == messagecontent.ToLower());
+            var roleToDel = settableRolesList.Where(x => x.Guild == guild).First(x => x.Name.ToLower() == messagecontent.ToLower());
 
             settableRolesList.Remove(roleToDel);
             await message.Channel.SendMessageAsync("```Role " + roleToDel.Name + " has been removed from settable List.```");
+
+            SerializeRoleList();
         }
 
         private async Task HandleRole(SocketUserMessage message, string trimmessage)
@@ -201,13 +220,13 @@ namespace DiscordBot
             var messagecontent = message.Content.Substring(trimmessage.Length);
 
             //Find matching role
-            if (!settableRolesList.Any(x => x.Name.ToLower() == messagecontent.ToLower()))
+            if (!settableRolesList.Where(x => x.Guild == guild).Any(x => x.Name.ToLower() == messagecontent.ToLower()))
             {
                 await message.Channel.SendMessageAsync("```Role does not exist in settable list.```");
                 return;
             }
 
-            var roleToSet = settableRolesList.First(x => x.Name.ToLower() == messagecontent.ToLower());
+            var roleToSet = settableRolesList.Where(x => x.Guild == guild).First(x => x.Name.ToLower() == messagecontent.ToLower());
 
             if(!guilduser.Roles.Contains(roleToSet))
             {
@@ -227,7 +246,7 @@ namespace DiscordBot
 
             string answerString = "```Roles:\n";
 
-            foreach(var role in settableRolesList)
+            foreach(var role in settableRolesList.Where(x => x.Guild == guild))
             {
                 answerString += role.Name + "\n";
             }
@@ -345,6 +364,50 @@ namespace DiscordBot
 
             //Return completely transformed string
             return text;
+        }
+
+        private void SerializeRoleList()
+        {
+            lock (settableRolesLock)
+            {
+                List<RolesGuildStruct> rolesGuildList = new List<RolesGuildStruct>();
+
+                foreach(var socketRole in settableRolesList)
+                {
+                    rolesGuildList.Add(new RolesGuildStruct() { role = socketRole.Id, guild = socketRole.Guild.Id });
+                }
+
+                // Create an instance of the XmlSerializer class;
+                // specify the type of object to serialize.
+                XmlSerializer mySerializer = new XmlSerializer(typeof(List<RolesGuildStruct>));
+                // To write to a file, create a StreamWriter object.  
+                StreamWriter myWriter = new StreamWriter("roles.xml");
+                mySerializer.Serialize(myWriter, rolesGuildList);
+                myWriter.Close();
+            }
+        }
+
+        private void DeSerializeRoleList()
+        {
+            if (!File.Exists("roles.xml"))
+                return;
+
+            List<RolesGuildStruct> tempList;
+            // Construct an instance of the XmlSerializer with the type  
+            // of object that is being deserialized.  
+            XmlSerializer mySerializer = new XmlSerializer(typeof(List<RolesGuildStruct>));
+            // To read the file, create a FileStream.  
+            FileStream myFileStream = new FileStream("roles.xml", FileMode.Open);
+            // Call the Deserialize method and cast to the object type.  
+            tempList = (List<RolesGuildStruct>)mySerializer.Deserialize(myFileStream);
+
+            foreach(var rolesGuild in tempList)
+            {
+                var socketRole = _client.GetGuild(rolesGuild.guild)?.GetRole(rolesGuild.role);
+
+                if (socketRole != null)
+                    settableRolesList.Add(socketRole);
+            }
         }
 
         private Task Log(LogMessage msg)
