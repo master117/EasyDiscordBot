@@ -24,6 +24,14 @@ namespace DiscordBot
         //Struct used to store usage info
         private Dictionary<ulong, List<DateTime>> spamList = new Dictionary<ulong, List<DateTime>>();
         private Dictionary<ulong, UserInteraction> usageList = new Dictionary<ulong, UserInteraction>();
+        private List<SocketRole> settableRolesList = new List<SocketRole>();
+        private string helpMessage =
+            "```Commands are:\n" +
+            "AddRole <role>\n" +
+            "DelRole <role>\n" +
+            "Role <role>\n" +
+            "Roles```";
+
         private struct UserInteraction
         {
             public string user;
@@ -50,11 +58,187 @@ namespace DiscordBot
             await Task.Delay(-1);
         }
 
-        private async Task MessageReceived(SocketMessage message)
+        private async Task MessageReceived(SocketMessage messageParam)
         {
-            if (message.Author.IsBot)
+            if (messageParam.Author.IsBot)
                 return;
 
+            // Don't process the command if it was a System Message
+            var message = messageParam as SocketUserMessage;
+
+            if (message == null)
+                return;
+
+            string command = message.Content.ToLower();
+
+            if (command.StartsWith("sos! help"))
+            {
+                await HandleHelp(message, "sos! help");
+                return;
+            }
+
+            if (command.StartsWith("sos! addrole "))
+            {
+                await HandleAddRole(message, "sos! addrole ");
+                return;
+            }
+
+            if (command.StartsWith("sos! delrole "))
+            {
+                await HandleDelRole(message, "sos! delrole ");
+                return;
+            }
+
+            if (command.StartsWith("sos! roles"))
+            {
+                await HandleRoles(message, "sos! roles ");
+                return;
+            }
+
+            if (command.StartsWith("sos! role "))
+            {
+                await HandleRole(message, "sos! role ");
+                return;
+            }
+
+            await HandleGodStringsAsync(message);
+        }
+
+        private async Task HandleHelp(SocketUserMessage message, string trimmessage)
+        {
+            await message.Channel.SendMessageAsync(helpMessage);
+        }
+
+        private async Task HandleAddRole(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var highestposition = guilduserBot.Roles.OrderByDescending(x => x.Position).First().Position;
+
+            var guilduser = (message.Author as SocketGuildUser);
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage roles. You can still use \"!sos role <role>\" to set one.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            //Find matching role
+            if(!guild.Roles.Any(x => x.Name.ToLower() == messagecontent.ToLower()))
+            {
+                await message.Channel.SendMessageAsync("```Role " + messagecontent + " does not exist.```");
+                return;
+            }
+
+            var roleToAdd = guild.Roles.First(x => x.Name.ToLower() == messagecontent.ToLower());
+
+            if (roleToAdd.Position >= highestposition)
+            {
+                await message.Channel.SendMessageAsync("```This role can not be managed.```");
+                return;
+            }
+
+            //Add role to settable list
+            if (!settableRolesList.Contains(roleToAdd))
+            {
+                settableRolesList.Add(roleToAdd);
+                settableRolesList = settableRolesList.OrderByDescending(x => x.Position).ToList();
+                await message.Channel.SendMessageAsync("```Role " + roleToAdd.Name + " has been added to settable List.```");
+            }
+            else
+            {
+                await message.Channel.SendMessageAsync("```Role " + roleToAdd.Name + " already exists in settable List, did you intend to delete it?```");
+            }
+        }
+
+        private async Task HandleDelRole(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+
+            var guilduser = (message.Author as SocketGuildUser);
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage roles. You can still use \"!sos role <role>\" to set one.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            //Find matching role
+            if (!settableRolesList.Any(x => x.Name.ToLower() == messagecontent.ToLower()))
+            {
+                await message.Channel.SendMessageAsync("```Role " + messagecontent + " does not exist in settable list.```");
+                return;
+            }
+
+            var roleToDel = settableRolesList.First(x => x.Name.ToLower() == messagecontent.ToLower());
+
+            settableRolesList.Remove(roleToDel);
+            await message.Channel.SendMessageAsync("```Role " + roleToDel.Name + " has been removed from settable List.```");
+        }
+
+        private async Task HandleRole(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+
+            var guilduser = (message.Author as SocketGuildUser);
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            //Find matching role
+            if (!settableRolesList.Any(x => x.Name.ToLower() == messagecontent.ToLower()))
+            {
+                await message.Channel.SendMessageAsync("```Role does not exist in settable list.```");
+                return;
+            }
+
+            var roleToSet = settableRolesList.First(x => x.Name.ToLower() == messagecontent.ToLower());
+
+            if(!guilduser.Roles.Contains(roleToSet))
+            {
+                await guilduser.AddRoleAsync(roleToSet);
+                await message.Channel.SendMessageAsync("```Role " + roleToSet.Name + " added.```");
+            }
+            else
+            {
+                await guilduser.RemoveRoleAsync(roleToSet);
+                await message.Channel.SendMessageAsync("```Role " + roleToSet.Name + " removed.```");
+            }              
+        }
+
+        private async Task HandleRoles(SocketUserMessage message, string trimmessage)
+        {
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+
+            string answerString = "```Roles:\n";
+
+            foreach(var role in settableRolesList)
+            {
+                answerString += role.Name + "\n";
+            }
+
+            answerString += "```";
+
+            await message.Channel.SendMessageAsync(answerString);
+        }
+
+        private async Task HandleGodStringsAsync(SocketMessage message)
+        {
             string content = message.Content;
             bool userInteractionBool = false;
             foreach (var godString in replaceTheseStrings)
