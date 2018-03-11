@@ -1,3 +1,6 @@
+---
+layout: default
+---
 <h3>Introduction</h3>
 EasyDiscordBot is a Discord Bot written in C# for the Haruhi Discord. It can be used on any Server you like and is easy to configure.
 
