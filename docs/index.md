@@ -8,11 +8,10 @@ EasyDiscordBot is a Discord Bot written in C# for the Haruhi Discord. It can be 
 
 #### [](#header-4)Features
 
-EasyDiscordBot offers multiple functions, detailed below, all of them are prefixed with 
+EasyDiscordBot offers multiple active commands, detailed below, all of them are prefixed with: 
 ```
 SOS!
 ```
-
 
 | command | parameter            | function                                                 |
 |:--------|:---------------------|:---------------------------------------------------------|
@@ -21,3 +20,19 @@ SOS!
 | role    | rolename, no # or id | Set or removes the role (if allowed) from the user.      |
 | addrole | rolename, no # or id | Adds a role to the list of settable/allowed roles.       |
 | delrole | rolename, no # or id | Removes a role from the list of settable/allowed roles.  |
+
+
+EasyDiscordBot also offers multiple passive commands, detailed below, all of them are in reaction to user messages:
+
+| message contains          | action                                                                                                       |
+|:--------------------------|:-------------------------------------------------------------------------------------------------------------|
+| word from replacementlist | Bot reacts with a snarky message, "correction", and replaces the word from replacementlist with a better one |  
+
+![Example Correction](https://github.com/master117/EasyDiscordBot/docs/example1.png)
+
+Notes
+
+* All commands are unaffected by capitalization. 
+* The settable rolelist is stored and restored after restart.
+* Some commands have spam protection.
+* Have Fun!
