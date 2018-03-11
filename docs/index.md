@@ -28,7 +28,7 @@ EasyDiscordBot also offers multiple passive commands, detailed below, all of the
 |:--------------------------|:-------------------------------------------------------------------------------------------------------------|
 | word from replacementlist | Bot reacts with a snarky message, "correction", and replaces the word from replacementlist with a better one |  
 
-![Example Correction](https://github.com/master117/EasyDiscordBot/docs/example1.png)
+![Example Correction](https://raw.githubusercontent.com/master117/EasyDiscordBot/master/docs/example1.png)
 
 Notes
 
