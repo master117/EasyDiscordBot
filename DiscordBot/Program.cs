@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Xml.Serialization;
 using Discord;
 using Discord.WebSocket;
+using static DiscordBot.Correction;
 
 namespace DiscordBot
 {
@@ -16,12 +17,13 @@ namespace DiscordBot
     {
         private DiscordSocketClient _client;
         private object settableRolesLock = new object();
+        public static Random rand = new Random();
 
-        //Contains strings to be replaced
-        private List<string> replaceTheseStrings = new List<string>() { "GODDESS", "GOD"};
-        private List<string> ignoreTheseStrings = new List<string>() { "GOD IS DEAD", "GOD KNOWS" };
-        private const string replacementString = "Haruhi";
+        //Hardcoded strings
+        private string helpMessage = "Documentation can be found at: https://master117.github.io/EasyDiscordBotPage/";
 
+        //Correction Class
+        private static Correction correction = new Correction();
 
         //Struct used to store usage info
         private Dictionary<ulong, List<DateTime>> spamList = new Dictionary<ulong, List<DateTime>>();
@@ -31,15 +33,7 @@ namespace DiscordBot
         {
             public ulong role;
             public ulong guild;
-
-        }
-
-        private string helpMessage =
-            "```Commands are:\n" +
-            "AddRole <role>\n" +
-            "DelRole <role>\n" +
-            "Role <role>\n" +
-            "Roles```";
+        }       
 
         private struct UserInteraction
         {
@@ -71,6 +65,7 @@ namespace DiscordBot
         private async Task _client_GuildAvailable(SocketGuild arg)
         {
             DeSerializeRoleList();
+            correction.DeSerializeCorrectionsLists();
         }
 
         private async Task MessageReceived(SocketMessage messageParam)
@@ -89,6 +84,48 @@ namespace DiscordBot
             if (command.StartsWith("sos! help"))
             {
                 await HandleHelp(message, "sos! help");
+                return;
+            }
+
+            if (command.StartsWith("sos! corrections"))
+            {
+                await HandleCorrections(message, "sos! corrections");
+                return;
+            }
+
+            if (command.StartsWith("sos! addreplace "))
+            {
+                await HandleAddReplace(message, "sos! addreplace ");
+                return;
+            }
+
+            if (command.StartsWith("sos! delreplace "))
+            {
+                await HandleDelReplace(message, "sos! delreplace ");
+                return;
+            }
+
+            if (command.StartsWith("sos! addignore "))
+            {
+                await HandleAddIgnore(message, "sos! addignore ");
+                return;
+            }
+
+            if (command.StartsWith("sos! delignore "))
+            {
+                await HandleDelIgnore(message, "sos! delignore ");
+                return;
+            }
+
+            if (command.StartsWith("sos! addcorrection "))
+            {
+                await HandleAddCorrection(message, "sos! addcorrection ");
+                return;
+            }
+
+            if (command.StartsWith("sos! delcorrection "))
+            {
+                await HandleDelCorrection(message, "sos! delcorrection ");
                 return;
             }
 
@@ -124,6 +161,239 @@ namespace DiscordBot
             await message.Channel.SendMessageAsync(helpMessage);
         }
 
+        #region HandleCorrections
+        private async Task HandleCorrections(SocketUserMessage message, string v)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var guilduser = (message.Author as SocketGuildUser);
+            List<string> replaceTheseStrings = correction.replaceTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+            List<string> ignoreTheseStrings = correction.ignoreTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+            List<string> correctionsStrings = correction.correctionsStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            string returnMessage = "```Strings to be replaced:\n";
+            foreach (var text in replaceTheseStrings)
+                returnMessage += text + "\n";
+
+            returnMessage += "\nStrings to be ignored:\n";
+            foreach (var text in ignoreTheseStrings)
+                returnMessage += text + "\n";
+
+            returnMessage += "\nCorrections:\n";
+            foreach (var text in correctionsStrings)
+                returnMessage += text + "\n";
+
+            returnMessage += "```";
+
+            await message.Channel.SendMessageAsync(returnMessage);
+            return;
+        }
+
+        private async Task HandleAddReplace(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var guilduser = (message.Author as SocketGuildUser);
+            List<string> replaceTheseStrings = correction.replaceTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage corrections.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            if (replaceTheseStrings.Contains(messagecontent.ToLower()))
+            {
+                await message.Channel.SendMessageAsync("```String is already to be replaced.```");
+                return;
+            }
+
+            //Add and Serialize
+            CorrectionGuildStruct cgs = new CorrectionGuildStruct()
+            {
+                guild = guild.Id,
+                text = messagecontent.ToLower()
+            };           
+            correction.replaceTheseStrings.Add(cgs);
+            correction.SerializeCorrectionsLists();
+            await message.Channel.SendMessageAsync("```Added " + messagecontent + " to replace```");
+        }
+
+        private async Task HandleDelReplace(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var guilduser = (message.Author as SocketGuildUser);
+            List<string> replaceTheseStrings = correction.replaceTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage corrections.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            if (!replaceTheseStrings.Contains(messagecontent.ToLower()))
+            {
+                await message.Channel.SendMessageAsync("```String is not in list.```");
+                return;
+            }
+
+            //Remove and Serialize
+            correction.replaceTheseStrings.Remove(correction.replaceTheseStrings.Where(x => x.guild == guild.Id && x.text == messagecontent.ToLower()).First());
+            correction.SerializeCorrectionsLists();
+            await message.Channel.SendMessageAsync("```Removed " + messagecontent + " from replace```");
+        }
+
+        private async Task HandleAddIgnore(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var guilduser = (message.Author as SocketGuildUser);
+            List<string> ignoreTheseStrings = correction.ignoreTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage corrections.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            if (ignoreTheseStrings.Contains(messagecontent.ToLower()))
+            {
+                await message.Channel.SendMessageAsync("```String is already to be ignored.```");
+                return;
+            }
+
+            //Add and Serialize
+            CorrectionGuildStruct cgs = new CorrectionGuildStruct()
+            {
+                guild = guild.Id,
+                text = messagecontent.ToLower()
+            };
+            correction.ignoreTheseStrings.Add(cgs);
+            correction.SerializeCorrectionsLists();
+            await message.Channel.SendMessageAsync("```Added " + messagecontent + " to ignore```");
+        }
+
+        private async Task HandleDelIgnore(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var guilduser = (message.Author as SocketGuildUser);
+            List<string> ignoreTheseStrings = correction.ignoreTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage corrections.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            if (!ignoreTheseStrings.Contains(messagecontent.ToLower()))
+            {
+                await message.Channel.SendMessageAsync("```String is not in list.```");
+                return;
+            }
+
+            //Remove and Serialize
+            correction.ignoreTheseStrings.Remove(correction.ignoreTheseStrings.Where(x => x.guild == guild.Id && x.text == messagecontent.ToLower()).First());
+            correction.SerializeCorrectionsLists();
+            await message.Channel.SendMessageAsync("```Removed " + messagecontent + " from ignore```");
+        }
+
+        private async Task HandleAddCorrection(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var guilduser = (message.Author as SocketGuildUser);
+            List<string> correctionsStrings = correction.correctionsStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage corrections.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            if (correctionsStrings.Contains(messagecontent))
+            {
+                await message.Channel.SendMessageAsync("```String is already to be replaced.```");
+                return;
+            }
+
+            //Add and Serialize
+            CorrectionGuildStruct cgs = new CorrectionGuildStruct()
+            {
+                guild = guild.Id,
+                text = messagecontent
+            };
+            correction.correctionsStrings.Add(cgs);
+            correction.SerializeCorrectionsLists();
+            await message.Channel.SendMessageAsync("```Added " + messagecontent + " to corrections```");
+        }
+
+        private async Task HandleDelCorrection(SocketUserMessage message, string trimmessage)
+        {
+            //Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
+            var roles = guild.Roles;
+            var guilduserBot = guild.GetUser(_client.CurrentUser.Id);
+            var guilduser = (message.Author as SocketGuildUser);
+            List<string> correctionsStrings = correction.correctionsStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            //Check if the user is allowed to manage roles
+            if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
+            {
+                await message.Channel.SendMessageAsync("```You don't have permission to manage corrections.```");
+                return;
+            }
+
+            //Split message into parts
+            var messagecontent = message.Content.Substring(trimmessage.Length);
+
+            if (!correctionsStrings.Contains(messagecontent))
+            {
+                await message.Channel.SendMessageAsync("```String is not in list.```");
+                return;
+            }     
+
+            //Remove and Serialize
+            correction.correctionsStrings.Remove(correction.correctionsStrings.Where(x => x.guild == guild.Id && x.text == messagecontent).First());
+            correction.SerializeCorrectionsLists();
+            await message.Channel.SendMessageAsync("```Removed " + messagecontent + " from corrections```");
+        }
+        #endregion
+
+        #region HandleRoles
         private async Task HandleAddRole(SocketUserMessage message, string trimmessage)
         {
             //Get information objects
@@ -255,16 +525,26 @@ namespace DiscordBot
 
             await message.Channel.SendMessageAsync(answerString);
         }
+        #endregion
 
         private async Task HandleGodStringsAsync(SocketMessage message)
         {
+            // Get information objects
+            var guild = (message.Channel as SocketGuildChannel)?.Guild;
             string content = message.Content;
             bool userInteractionBool = false;
+            List<string> replaceTheseStrings = correction.replaceTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+            List<string> ignoreTheseStrings = correction.ignoreTheseStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+            List<string> correctionsStrings = correction.correctionsStrings.Where(x => x.guild == guild.Id).Select(x => x.text).ToList();
+
+            if (replaceTheseStrings.Count == 0 || correctionsStrings.Count == 0)
+                return;
+
             foreach (var godString in replaceTheseStrings)
             {
-                if (content.ToUpper().Contains(godString))
+                if (content.ToLower().Contains(godString))
                 {
-                    content = GetGodStringReplacement(content, godString);
+                    content = GetGodStringReplacement(content, godString, ignoreTheseStrings, correctionsStrings);
                     userInteractionBool = true;
                 }
             }
@@ -327,13 +607,13 @@ namespace DiscordBot
             return spamList[id].Count;
         }
 
-        //Replace all occurences of a Godstring that aren't a antigodstring in a message with Haruhi
-        private string GetGodStringReplacement(string content, string godString)
+        //Replace all occurences of a Godstring that aren't a antigodstring in a message with corrections
+        private string GetGodStringReplacement(string content, string godString, List<string> ignoreTheseStrings, List<string> correctionsStrings)
         {
             //Create copy
             string text = content;
             //Index from which to check for the next godstring
-            int startIndex = text.ToUpper().IndexOf(godString, 0, StringComparison.Ordinal);
+            int startIndex = text.ToLower().IndexOf(godString, 0, StringComparison.Ordinal);
             //Check if a godstring still exists
             while (startIndex != -1)
             {
@@ -342,10 +622,10 @@ namespace DiscordBot
                 foreach (var antiGodString in ignoreTheseStrings)
                 {
                     if (!(content.Length < startIndex + antiGodString.Length) 
-                        && content.ToUpper().Substring(startIndex, antiGodString.Length) == antiGodString)
+                        && content.ToLower().Substring(startIndex, antiGodString.Length) == antiGodString)
                     {
                         antiGodBool = true;
-                        startIndex = text.ToUpper().IndexOf(godString, startIndex + antiGodString.Length, StringComparison.Ordinal);
+                        startIndex = text.ToLower().IndexOf(godString, startIndex + antiGodString.Length, StringComparison.Ordinal);
                         break;
                     }
                 }
@@ -355,11 +635,16 @@ namespace DiscordBot
                     continue;
 
                 // Replace the current occurence of the godstring
-                text = text.Remove(startIndex, godString.Length);
-                text = text.Insert(startIndex, replacementString);
+                string rep = correctionsStrings.ElementAt(rand.Next(correctionsStrings.Count));
+
+                if (content.ToUpper() == content)
+                    rep = rep.ToUpper();
+
+                text = text.Remove(startIndex, godString.Length);                
+                text = text.Insert(startIndex, rep);
 
                 //Check for next godstring
-                startIndex = text.ToUpper().IndexOf(godString, startIndex + replacementString.Length, StringComparison.Ordinal);
+                startIndex = text.ToLower().IndexOf(godString, startIndex + rep.Length, StringComparison.Ordinal);
             }
 
             //Return completely transformed string
@@ -408,6 +693,8 @@ namespace DiscordBot
                 if (socketRole != null)
                     settableRolesList.Add(socketRole);
             }
+            //CleanUp
+            myFileStream.Close();
         }
 
         private Task Log(LogMessage msg)
