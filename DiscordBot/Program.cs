@@ -675,7 +675,7 @@ namespace DiscordBot
         private void DeSerializeRoleList()
         {
             if (!File.Exists("roles.xml"))
-                return;
+                return;            
 
             List<RolesGuildStruct> tempList;
             // Construct an instance of the XmlSerializer with the type  
@@ -685,6 +685,9 @@ namespace DiscordBot
             FileStream myFileStream = new FileStream("roles.xml", FileMode.Open);
             // Call the Deserialize method and cast to the object type.  
             tempList = (List<RolesGuildStruct>)mySerializer.Deserialize(myFileStream);
+
+            //Clear old settable roles
+            settableRolesList.Clear();
 
             foreach(var rolesGuild in tempList)
             {
