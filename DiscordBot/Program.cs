@@ -666,9 +666,8 @@ namespace DiscordBot
                 // specify the type of object to serialize.
                 XmlSerializer mySerializer = new XmlSerializer(typeof(List<RolesGuildStruct>));
                 // To write to a file, create a StreamWriter object.  
-                StreamWriter myWriter = new StreamWriter("roles.xml");
-                mySerializer.Serialize(myWriter, rolesGuildList);
-                myWriter.Close();
+                using (StreamWriter myWriter = new StreamWriter("roles.xml"))
+                    mySerializer.Serialize(myWriter, rolesGuildList);
             }
         }
 
@@ -682,22 +681,22 @@ namespace DiscordBot
             // of object that is being deserialized.  
             XmlSerializer mySerializer = new XmlSerializer(typeof(List<RolesGuildStruct>));
             // To read the file, create a FileStream.  
-            FileStream myFileStream = new FileStream("roles.xml", FileMode.Open);
-            // Call the Deserialize method and cast to the object type.  
-            tempList = (List<RolesGuildStruct>)mySerializer.Deserialize(myFileStream);
-
-            //Clear old settable roles
-            settableRolesList.Clear();
-
-            foreach(var rolesGuild in tempList)
+            using (FileStream myFileStream = new FileStream("roles.xml", FileMode.Open))
             {
-                var socketRole = _client.GetGuild(rolesGuild.guild)?.GetRole(rolesGuild.role);
+                // Call the Deserialize method and cast to the object type.  
+                tempList = (List<RolesGuildStruct>)mySerializer.Deserialize(myFileStream);
 
-                if (socketRole != null)
-                    settableRolesList.Add(socketRole);
+                //Clear old settable roles
+                settableRolesList.Clear();
+
+                foreach (var rolesGuild in tempList)
+                {
+                    var socketRole = _client.GetGuild(rolesGuild.guild)?.GetRole(rolesGuild.role);
+
+                    if (socketRole != null)
+                        settableRolesList.Add(socketRole);
+                }
             }
-            //CleanUp
-            myFileStream.Close();
         }
 
         private Task Log(LogMessage msg)
