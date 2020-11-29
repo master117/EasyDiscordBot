@@ -64,7 +64,7 @@ namespace DiscordBot
 
         private async Task _client_GuildAvailable(SocketGuild arg)
         {
-            DeSerializeRoleList();
+            await Task.Run(() => DeSerializeRoleList());
             correction.DeSerializeCorrectionsLists();
         }
 
@@ -408,7 +408,7 @@ namespace DiscordBot
             //Check if the user is allowed to manage roles
             if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
             {
-                await message.Channel.SendMessageAsync("```You don't have permission to manage roles. You can still use \"!sos role <role>\" to set one.```");
+                await message.Channel.SendMessageAsync("```You don't have permission to manage roles. You can still use \"sos! role <role>\" to set one.```");
                 return;
             }
 
@@ -456,7 +456,7 @@ namespace DiscordBot
             //Check if the user is allowed to manage roles
             if (!guilduser.Roles.Any(x => x.Permissions.ManageRoles))
             {
-                await message.Channel.SendMessageAsync("```You don't have permission to manage roles. You can still use \"!sos role <role>\" to set one.```");
+                await message.Channel.SendMessageAsync("```You don't have permission to manage roles. You can still use \"sos! role <role>\" to set one.```");
                 return;
             }
 

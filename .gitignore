@@ -24,6 +24,8 @@ Token.txt
 /packages/**/*.txt
 /packages/**/*.xdt
 /packages/**/*.xml
+/packages/**/*.signature.p7s
+/packages/**/*.png
 
 
 
